@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; frame-src 'self'; base-uri 'none'; form-action 'none'">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>infinity842 の作品サイト</title>
+  <link rel="stylesheet" href="assets/style.css">
+  <script type="module" src="assets/play.js"></script>
+</head>
+<body class="play-body">
+  <header class="play-header">
+    <a class="back-link" href="./">← 作品の一覧へ</a>
+    <h1 id="work-title" class="work-title"></h1>
+    <button id="fullscreen" class="fullscreen-button" type="button" hidden>全画面</button>
+  </header>
+  <main class="stage">
+    <p id="status" class="status" role="status">読み込み中…</p>
+    <iframe id="frame" class="frame" sandbox="allow-scripts" allow="fullscreen" hidden></iframe>
+  </main>
+</body>
+</html>
