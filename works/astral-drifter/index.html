@@ -2,9 +2,10 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; connect-src 'none'; form-action 'none'; base-uri 'none'; script-src 'unsafe-inline' https://cdn.tailwindcss.com https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js; worker-src blob:; style-src 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; connect-src 'none'; form-action 'none'; base-uri 'none'; script-src 'unsafe-inline' https://cdn.tailwindcss.com https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js; style-src 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>ASTRAL DRIFTER - Celestial Symphony Edition</title>
+    <meta name="description" content="125種類の星霊（せいれい）と戦う、宇宙シューティングゲーム！">
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
     <style>
@@ -271,16 +272,29 @@
         resizeCanvas();
 
         // ==========================================
-        // 2. SOUND ENGINE (TONE.JS SAFE WRAPPER)
+        // 2. SOUND ENGINE (TONE.JS SAFE WRAPPER + BGM)
         // ==========================================
         const SoundEngine = {
             muted: false,
             initialized: false,
             synth: null,
             bassSynth: null,
+            bgmPad: null,
+            bgmArp: null,
+            bgmBass: null,
+            bgmLoop: null,
+            bgmStep: 0,
+            bgmPlaying: false,
 
             async init() {
-                if (this.initialized) return;
+                if (this.initialized) {
+                    try {
+                        if (typeof Tone !== 'undefined' && Tone.context && Tone.context.state !== 'running') {
+                            await Tone.start();
+                        }
+                    } catch (e) {}
+                    return;
+                }
                 try {
                     if (typeof Tone !== 'undefined') {
                         await Tone.start();
@@ -295,11 +309,99 @@
                             envelope: { attack: 0.02, decay: 0.25, sustain: 0.1, release: 0.4 }
                         }).toDestination();
                         this.bassSynth.volume.value = -10;
+
+                        // Original Celestial Symphony BGM Synths
+                        this.bgmPad = new Tone.PolySynth(Tone.Synth, {
+                            oscillator: { type: 'sine' },
+                            envelope: { attack: 0.35, decay: 0.4, sustain: 0.55, release: 1.2 }
+                        }).toDestination();
+                        this.bgmPad.volume.value = -21;
+
+                        this.bgmArp = new Tone.Synth({
+                            oscillator: { type: 'triangle' },
+                            envelope: { attack: 0.015, decay: 0.18, sustain: 0.08, release: 0.35 }
+                        }).toDestination();
+                        this.bgmArp.volume.value = -18;
+
+                        this.bgmBass = new Tone.Synth({
+                            oscillator: { type: 'triangle' },
+                            envelope: { attack: 0.02, decay: 0.25, sustain: 0.2, release: 0.4 }
+                        }).toDestination();
+                        this.bgmBass.volume.value = -17;
+
+                        const chords = [
+                            { pad: ['E3', 'G3', 'B3', 'F#4'], bass: 'E2', arp: ['E4', 'B4', 'F#5', 'G5', 'B4', 'E5', 'F#5', 'B5'] },
+                            { pad: ['C3', 'E3', 'G3', 'D4'], bass: 'C2', arp: ['C4', 'G4', 'D5', 'E5', 'G4', 'C5', 'D5', 'G5'] },
+                            { pad: ['A2', 'C3', 'E3', 'B3'], bass: 'A1', arp: ['A3', 'E4', 'B4', 'C5', 'E4', 'A4', 'B4', 'E5'] },
+                            { pad: ['B2', 'D3', 'F#3', 'A3'], bass: 'B1', arp: ['B3', 'F#4', 'A4', 'D5', 'F#4', 'B4', 'A4', 'F#5'] }
+                        ];
+
+                        Tone.Transport.bpm.value = 112;
+                        this.bgmLoop = new Tone.Loop((time) => {
+                            if (this.muted || !this.bgmPlaying) return;
+                            const step = this.bgmStep % 32;
+                            const bar = Math.floor(step / 8);
+                            const sub = step % 8;
+                            const current = chords[bar];
+                            const isBoss = (typeof boss !== 'undefined' && boss !== null);
+
+                            if (sub === 0) {
+                                this.bgmPad.triggerAttackRelease(current.pad, '1n', time);
+                                this.bgmBass.triggerAttackRelease(current.bass, '4n', time);
+                            } else if (isBoss && sub % 2 === 0) {
+                                this.bgmBass.triggerAttackRelease(current.bass, '8n', time);
+                            } else if (!isBoss && sub === 4) {
+                                this.bgmBass.triggerAttackRelease(current.bass, '4n', time);
+                            }
+
+                            const arpNote = current.arp[sub];
+                            if (arpNote && (isBoss || sub % 2 === 0 || sub === 5)) {
+                                this.bgmArp.triggerAttackRelease(arpNote, '16n', time);
+                            }
+
+                            this.bgmStep = (this.bgmStep + 1) % 32;
+                        }, '8n');
+
                         this.initialized = true;
                     }
                 } catch (e) {
                     console.warn('Audio init skipped:', e);
                 }
+            },
+
+            startBgm() {
+                if (this.muted || !this.initialized || !this.bgmLoop || this.bgmPlaying) return;
+                try {
+                    this.bgmStep = 0;
+                    this.bgmPlaying = true;
+                    if (Tone.Transport.state !== 'started') {
+                        Tone.Transport.start();
+                    }
+                    this.bgmLoop.start(0);
+                } catch (e) {}
+            },
+
+            stopBgm() {
+                this.bgmPlaying = false;
+                try {
+                    if (this.bgmLoop) {
+                        this.bgmLoop.stop();
+                    }
+                } catch (e) {}
+            },
+
+            setMuted(nextMuted) {
+                this.muted = nextMuted;
+                try {
+                    if (typeof Tone !== 'undefined' && Tone.Destination) {
+                        Tone.Destination.mute = nextMuted;
+                    }
+                    if (nextMuted) {
+                        this.stopBgm();
+                    } else if (typeof gameState !== 'undefined' && gameState === 'PLAYING') {
+                        this.startBgm();
+                    }
+                } catch (e) {}
             },
 
             playLaser(chargeScale = 1) {
@@ -342,7 +444,7 @@
         };
 
         document.getElementById('muteBtn').addEventListener('click', () => {
-            SoundEngine.muted = !SoundEngine.muted;
+            SoundEngine.setMuted(!SoundEngine.muted);
             document.getElementById('muteBtn').textContent = SoundEngine.muted ? '🔇' : '🔊';
         });
 
@@ -987,7 +1089,11 @@
         }
 
         function resetAndStartGame() {
-            SoundEngine.init();
+            SoundEngine.init().then(() => {
+                if (gameState === 'PLAYING' && !SoundEngine.muted) {
+                    SoundEngine.startBgm();
+                }
+            });
             score = 0;
             combo = 0;
             comboTimer = 0;
@@ -1043,6 +1149,7 @@
 
         function triggerGameOver() {
             gameState = 'GAMEOVER';
+            SoundEngine.stopBgm();
             saveProgress(score);
             document.getElementById('finalScore').textContent = score.toLocaleString();
             document.getElementById('highScoreDisplay').textContent = highScore.toLocaleString();
